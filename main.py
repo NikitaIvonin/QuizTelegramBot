@@ -12,7 +12,7 @@ from aiogram import F
 
 
 
-from Data import create_table, update_quiz_index, get_quiz_index
+from Data import update_quiz_index, get_quiz_index, get_player_result, create_table_qustions, create_table_results, update_player_results
 from butt import generate_options_keyboard, get_question, quiz_data
 
 
@@ -45,7 +45,9 @@ async def new_quiz(message):
     user_id = message.from_user.id
     # сбрасываем значение текущего индекса вопроса квиза в 0
     current_question_index = 0
+    current_result_index = 0
     await update_quiz_index(user_id, current_question_index)
+    await update_player_results(user_id, current_result_index)
 
     # запрашиваем новый вопрос для квиза
     await get_question(message, user_id)
@@ -59,7 +61,15 @@ async def cmd_quiz(message: types.Message):
     # Запускаем новый квиз
     await new_quiz(message)
 
-result = 0
+
+
+@dp.message(F.text=="Результат")
+@dp.message(Command("result"))
+async def player_result(message: types.Message):
+    user_id = message.from_user.id
+    current_result_index = await get_player_result(user_id)
+    await message.answer(f"Ваш результат: %s "% current_result_index)
+
 
 @dp.callback_query(F.data == "right_answer")
 async def right_answer(callback: types.CallbackQuery):
@@ -72,14 +82,21 @@ async def right_answer(callback: types.CallbackQuery):
     # Получение текущего вопроса для данного пользователя
     current_question_index = await get_quiz_index(callback.from_user.id)
 
+    #Получение результата для данного пользователя:
+    current_result_index = await get_player_result(callback.from_user.id)
+
     correct_option = quiz_data[current_question_index]['correct_option']
     
     await callback.message.answer(f"Верно! Ваш ответ: {quiz_data[current_question_index]['options'][correct_option]}")
 
     current_question_index += 1
-    global result
-    result += 1
+    current_result_index += 1
     await update_quiz_index(callback.from_user.id, current_question_index)
+
+
+    await update_player_results(callback.from_user.id, current_result_index)
+
+
     # Проверяем достигнут ли конец квиза
     if current_question_index < len(quiz_data):
         # Следующий вопрос
@@ -87,7 +104,7 @@ async def right_answer(callback: types.CallbackQuery):
     else:
         # Уведомление об окончании квиза
         await callback.message.answer("Это был последний вопрос. Квиз завершен!")
-        await callback.message.answer("Ваш результат: %s" % result)
+        await callback.message.answer("Ваш результат: %s" % current_result_index)
 
 
 
@@ -105,6 +122,8 @@ async def wrong_answer(callback: types.CallbackQuery):
     # Получение текущего вопроса для данного пользователя
     current_question_index = await get_quiz_index(callback.from_user.id)
 
+    current_result_index = await get_player_result(callback.from_user.id)
+
     correct_option = quiz_data[current_question_index]['correct_option']
 
     # Отправляем в чат сообщение об ошибке с указанием верного ответа
@@ -112,8 +131,12 @@ async def wrong_answer(callback: types.CallbackQuery):
 
     # Обновление номера текущего вопроса в базе данных
     current_question_index += 1
-    global result
     await update_quiz_index(callback.from_user.id, current_question_index)
+
+
+    await update_player_results(callback.from_user.id, current_result_index)
+
+
     # Проверяем достигнут ли конец квиза
     if current_question_index < len(quiz_data):
         # Следующий вопрос
@@ -121,13 +144,14 @@ async def wrong_answer(callback: types.CallbackQuery):
     else:
         # Уведомление об окончании квиза
         await callback.message.answer("Это был последний вопрос. Квиз завершен!")
-        await callback.message.answer("Ваш результат: %s" % result)
+        await callback.message.answer("Ваш результат: %s" % current_result_index)
 
 # Запуск процесса поллинга новых апдейтов
 async def main():
 
-    # Запускаем создание таблицы базы данных
-    await create_table()
+    # Запускаем создание таблиц базы данных
+    await create_table_qustions()
+    await create_table_results()
 
     await dp.start_polling(bot)
 
